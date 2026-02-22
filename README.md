@@ -95,12 +95,20 @@ The entire Eclipse application (app + SearXNG) can be run with Docker Compose:
 Create a `.env.local` file in the `eclipse` directory:
 
 ```env
-# Backend service URLs
-SEARXNG_URL=http://localhost:8081
-OLLAMA_URL=http://localhost:11434
+# Switch between 'groq' or 'ollama'
+AI_PROVIDER=groq
 
-# Optional: API configuration
-NEXT_PUBLIC_API_TIMEOUT=30000
+# Groq (fast, cloud)
+GROQ_API_KEY=your api key here
+GROQ_MODEL=llama-3.1-8b-instant
+
+# Ollama (local, private)
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=mistral:latest
+
+# Always used
+SEARXNG_URL=http://localhost:8081
+
 ```
 
 ## Project Structure
