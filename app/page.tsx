@@ -386,7 +386,7 @@ export default function Home() {
                               className="px-3 py-2 rounded-full text-[11px] font-medium uppercase tracking-[0.08em] transition-all border flex items-center gap-2"
                               style={{
                                 background: 'rgba(255,255,255,0.04)',
-                                border: showModeDropdown ? '1px solid rgba(245,166,35,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                                border: showModeDropdown ? '1px solid rgba(228, 221, 209, 0.3)' : '1px solid rgba(255,255,255,0.08)',
                                 color: showModeDropdown ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)',
                               }}
                               distance={25}
