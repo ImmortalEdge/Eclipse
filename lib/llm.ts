@@ -105,25 +105,13 @@ export async function generateAnswer(
   "cards": [{"label": "Category", "value": "2-3 sentence explanation", "type": "info"}],
   "followUps": ["Related question 1", "Related question 2"],
   "longFormAnswerSegments": [{"text": "Technical analysis...", "source": {...}}]
-}`; 
-             "url": "...",
-             "title": "...",
-             "summary": "...",
-             "date": "..."
-           } 
-         }
-      ],
-      "needsFinance": boolean,
-      "company": { ... },
-      "chartData": [ ... ]
-    }
-    
-    CRITICAL RULES:
-    - NEVER use bracketed numbers like [1] or [2].
-    - NEVER output a "References" section.
-    - Sources MUST be objects within segments.
-    - "summary" in source should be specific to why this source supports the current text.
-  `;
+}
+CRITICAL RULES:
+- NEVER use bracketed numbers like [1] or [2].
+- NEVER output a "References" section.
+- Sources MUST be objects within segments.
+- "summary" in source should be specific to why this source supports the current text.
+`;
 
   try {
     const { streamResponse } = await import('./ai-provider');
