@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" fill="#0c0c0c"/>
+  <!-- Ambient halo -->
+  <circle cx="16" cy="16" r="16" fill="url(#ag)" opacity="1"/>
+  <!-- Outer tick ring -->
+  <circle cx="16" cy="16" r="14.72" stroke="#F5A623" stroke-width="0.192" stroke-opacity="0.12"/>
+  <!-- Tick marks (12) -->
+  <line x1="16" y1="1.92" x2="16" y2="3.2" stroke="#F5A623" stroke-width="0.448" stroke-linecap="round" opacity="0.5"/>
+  <line x1="23.38" y1="3.69" x2="22.72" y2="4.84" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="28.31" y1="8.62" x2="27.16" y2="9.28" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="30.08" y1="16" x2="28.8" y2="16" stroke="#F5A623" stroke-width="0.448" stroke-linecap="round" opacity="0.5"/>
+  <line x1="28.31" y1="23.38" x2="27.16" y2="22.72" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="23.38" y1="28.31" x2="22.72" y2="27.16" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="16" y1="30.08" x2="16" y2="28.8" stroke="#F5A623" stroke-width="0.448" stroke-linecap="round" opacity="0.5"/>
+  <line x1="8.62" y1="28.31" x2="9.28" y2="27.16" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="3.69" y1="23.38" x2="4.84" y2="22.72" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="1.92" y1="16" x2="3.2" y2="16" stroke="#F5A623" stroke-width="0.448" stroke-linecap="round" opacity="0.5"/>
+  <line x1="3.69" y1="8.62" x2="4.84" y2="9.28" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <line x1="8.62" y1="3.69" x2="9.28" y2="4.84" stroke="#F5A623" stroke-width="0.256" stroke-linecap="round" opacity="0.2"/>
+  <!-- Main ring -->
+  <circle cx="16" cy="16" r="11.52" stroke="#F5A623" stroke-width="0.32" stroke-opacity="0.22"/>
+  <!-- Orbital arc segments (6) -->
+  <path d="M 16 4.48 A 11.52 11.52 0 0 1 24.47 9.24" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 24.47 9.24 A 11.52 11.52 0 0 1 27.52 16" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 27.52 16 A 11.52 11.52 0 0 1 24.47 22.76" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 24.47 22.76 A 11.52 11.52 0 0 1 16 27.52" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 16 27.52 A 11.52 11.52 0 0 1 7.53 22.76" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 7.53 22.76 A 11.52 11.52 0 0 1 4.48 16" stroke="#F5A623" stroke-width="0.704" stroke-linecap="round" opacity="0.72"/>
+  <!-- Inner ring -->
+  <circle cx="16" cy="16" r="7.04" stroke="#F5A623" stroke-width="0.224" stroke-opacity="0.16"/>
+  <!-- Orbital dots (6) -->
+  <circle cx="16" cy="4.48" r="1.024" fill="url(#ac)" opacity="1"/>
+  <circle cx="24.47" cy="9.24" r="0.704" fill="url(#ac)" opacity="1"/>
+  <circle cx="24.47" cy="22.76" r="1.024" fill="url(#ac)" opacity="1"/>
+  <circle cx="16" cy="27.52" r="0.704" fill="url(#ac)" opacity="1"/>
+  <circle cx="7.53" cy="22.76" r="1.024" fill="url(#ac)" opacity="1"/>
+  <circle cx="7.53" cy="9.24" r="0.704" fill="url(#ac)" opacity="1"/>
+  <!-- Crosshairs -->
+  <line x1="11.64" y1="16" x2="20.36" y2="16" stroke="#F5A623" stroke-width="0.224" stroke-linecap="round" stroke-opacity="0.3"/>
+  <line x1="16" y1="11.64" x2="16" y2="20.36" stroke="#F5A623" stroke-width="0.224" stroke-linecap="round" stroke-opacity="0.3"/>
+  <!-- Core -->
+  <circle cx="16" cy="16" r="2.24" fill="url(#ac)"/>
+  <!-- Specular -->
+  <circle cx="15.42" cy="15.42" r="0.8" fill="white" fill-opacity="0.68"/>
+  <defs>
+    <radialGradient id="ac" cx="38%" cy="32%" r="62%">
+      <stop offset="0%" stop-color="#FFF5CC"/>
+      <stop offset="40%" stop-color="#FFD166"/>
+      <stop offset="100%" stop-color="#E8880A"/>
+    </radialGradient>
+    <radialGradient id="ag" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F5A623" stop-opacity="0.2"/>
+      <stop offset="65%" stop-color="#F5A623" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#F5A623" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
