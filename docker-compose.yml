@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  searxng:
+    container_name: searxng
+    image: searxng/searxng:latest
+    networks:
+      - search-network
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./searxng:/etc/searxng
+    restart: always
+
+  app:
+    container_name: search-app
+    build:
+      context: ./eclipse
+      dockerfile: Dockerfile
+    networks:
+      - search-network
+    ports:
+      - "3000:3000"
+    environment:
+      - SEARXNG_URL=http://searxng:8080
+      - OLLAMA_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - searxng
+    restart: always
+
+networks:
+  search-network:
+    driver: bridge
