@@ -1,10 +1,10 @@
 # Eclipse Project
 
-Eclipse is a modern, AI-powered search application. It integrates [SearXNG](https://searxng.github.io/searxng/) (privacy-focused meta search engine) with [OLLAMA](https://ollama.ai/) (local LLM) to provide intelligent search results enhanced with large language model processing.
+Eclipse is a modern, AI-powered search application with comprehensive multilingual support. It integrates [SearXNG](https://searxng.github.io/searxng/) (privacy-focused meta search engine) with [OLLAMA](https://ollama.ai/) (local LLM) to provide intelligent search results enhanced with large language model processing.
 
 ---
 
-**This project is fully open source, licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).**
+**This project is fully open source, licensed under GNU Affero General Public License v3.0 (AGPL-3.0).**
 
 Contributions, forks, and public deployments are welcome!
 
@@ -12,8 +12,10 @@ Contributions, forks, and public deployments are welcome!
 
 ## Features
 
+- 🌍 **Full Multilingual Support**: Complete UI translation in 12 languages (English, Hindi, Spanish, French, Chinese, Arabic, Portuguese, German, Japanese, Russian, Bengali, Urdu)
 - 🔍 **Privacy-First Search**: Built on SearXNG for privacy-respecting meta-search
 - 🧠 **AI-Powered Results**: Integration with OLLAMA for local LLM processing
+- 🎙️ **Voice Interface**: Advanced voice search with animated solar system visual
 - 📊 **Rich Components**: 
   - AI-generated result cards
   - Knowledge stacks
@@ -24,6 +26,9 @@ Contributions, forks, and public deployments are welcome!
 - 🎨 **Modern UI**: Built with Next.js, React, Tailwind CSS, and Framer Motion
 - 🚀 **Fast & Responsive**: Optimized performance with streaming and virtual scrolling
 - 🐳 **Docker Support**: Easy deployment with Docker and Docker Compose
+- 📱 **Responsive Design**: Mobile-first approach with adaptive layouts
+- 🔐 **User Accounts**: Local authentication system with profile management
+- 📚 **Search History**: Persistent archive with advanced filtering
 
 ## Tech Stack
 
@@ -38,6 +43,8 @@ Contributions, forks, and public deployments are welcome!
   - Leaflet (maps)
   - Recharts (visualizations)
   - Lucide React (icons)
+  - Date-fns (date formatting)
+  - @tanstack/react-virtual (virtual scrolling)
 
 ## Getting Started
 
@@ -131,12 +138,14 @@ eclipse/
 │   ├── CalculatorWidget.tsx
 │   ├── Citation.tsx
 │   ├── CognitivePath.tsx
-│   ├── GenerativeCard.tsx
-│   ├── InlineAskPanel.tsx
-│   ├── KnowledgeStack.tsx
+│   ├── ConversationalVoiceUI.tsx
+│   ├── LanguageProvider.tsx
+│   ├── LanguageSettings.tsx
+│   ├── AccountPanel.tsx
 │   ├── MagneticButton.tsx
 │   ├── NearbyMap.tsx
 │   ├── ResearchProcess.tsx
+│   ├── Sidebar.tsx
 │   ├── StockWidget.tsx
 │   └── ...
 ├── lib/                    # Utility functions
@@ -145,6 +154,8 @@ eclipse/
 │   ├── search.ts
 │   ├── stock.ts
 │   ├── map.ts
+│   ├── history.ts
+│   ├── i18n.ts
 │   └── ...
 ├── public/                 # Static assets
 ├── Dockerfile
@@ -157,17 +168,37 @@ eclipse/
 
 ### Basic Search
 
-1. Enter your search query in the search bar
-2. Results are fetched from SearXNG
-3. AI processes results and generates insights
+1. Select your preferred language from the language settings
+2. Enter your search query in the search bar
+3. Results are fetched from SearXNG
+4. AI processes results and generates insights
 
-### Available Widgets
+### Available Features
 
+- **Multilingual Interface**: Complete UI translation with RTL support
+- **Voice Search**: Advanced voice interface with solar system animations
 - **AI Result Cards**: AI-generated summaries of search results
 - **Knowledge Stack**: Organized information cards
 - **Stock Widget**: Real-time stock information
 - **Calculator**: Interactive math calculations
 - **Maps**: Geolocation-based results
+- **Search History**: Persistent archive with filtering
+- **User Accounts**: Local authentication and profiles
+
+### Supported Languages
+
+- English (en)
+- Hindi (hi)
+- Spanish (es)
+- French (fr)
+- Chinese (zh)
+- Arabic (ar)
+- Portuguese (pt)
+- German (de)
+- Japanese (ja)
+- Russian (ru)
+- Bengali (bn)
+- Urdu (ur)
 
 ## API Routes
 
@@ -175,6 +206,18 @@ eclipse/
 - `POST /api/generate-card` - Generate AI result cards
 - `POST /api/generate-stack-card` - Generate knowledge stack cards
 - `GET /api/stock` - Get stock information
+
+## Internationalization (i18n)
+
+Eclipse supports comprehensive internationalization:
+
+- **12 languages** with full UI translation
+- **RTL support** for Arabic and Urdu
+- **Language detection** based on browser preferences
+- **Persistent language selection** in localStorage
+- **Fallback to English** for missing translations
+
+Translation files are located in `lib/i18n.ts` and can be easily extended.
 
 ## Contributing
 
@@ -185,6 +228,13 @@ I welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guide
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+### Adding New Languages
+
+1. Add language code to `SUPPORTED_LANGUAGES` in `lib/i18n.ts`
+2. Add translations to the `TRANSLATIONS` object
+3. Update the `Translations` interface if adding new keys
+4. Test the implementation
 
 ## Development
 
@@ -203,13 +253,17 @@ npm run lint
 
 ## Roadmap
 
+- [x] ✅ Complete multilingual support (12 languages)
+- [x] ✅ Voice interface with solar system animations
+- [x] ✅ User authentication system
+- [x] ✅ Search history and archiving
 - [ ] Enhanced caching strategies
 - [ ] Advanced result filtering
 - [ ] Custom theme support
-- [ ] Multi-language support
 - [ ] WebSocket real-time updates
 - [ ] Result export (PDF, JSON)
 - [ ] Browser extension
+- [ ] Mobile app development
 
 ## Troubleshooting
 
@@ -223,6 +277,14 @@ npm run lint
 - Check Docker logs: `docker-compose logs searxng`
 
 ### Build Errors
+- Check Node.js version (18+ required)
+- Clear node_modules: `rm -rf node_modules && npm install`
+- Verify environment variables
+
+### Translation Issues
+- Check `lib/i18n.ts` for missing translation keys
+- Ensure language code matches supported languages
+- Clear browser cache and localStorage
 
 
 ## License
@@ -233,8 +295,22 @@ If you modify or deploy this software as a service, you must make the complete c
 
 ## Support
 
+For support and questions:
+- Create an issue in the GitHub repository
+- Check the troubleshooting section above
+- Review the documentation
 
 ## Acknowledgments
+
+- [SearXNG](https://searxng.github.io/searxng/) for privacy-focused meta-search
+- [OLLAMA](https://ollama.ai/) for local LLM capabilities
+- [Next.js](https://nextjs.org/) for the React framework
+- [Tailwind CSS](https://tailwindcss.com/) for styling
+- [Framer Motion](https://www.framer.com/motion/) for animations
+
+---
+
+**Eclipse** - Intelligence at your fingertips, in your language. 🌍✨
 
 
 
