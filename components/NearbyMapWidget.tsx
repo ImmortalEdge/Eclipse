@@ -13,6 +13,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // Dynamically import the Map component to avoid SSR issues
+// NOTE: The TileLayer is located in the './NearbyMap' component and needs to be updated there.
 const NearbyMap = dynamic(() => import('./NearbyMap'), {
     ssr: false,
     loading: () => <div className="w-full h-full bg-zinc-900 animate-pulse flex items-center justify-center">

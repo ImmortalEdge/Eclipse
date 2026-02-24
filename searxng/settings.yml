@@ -2,7 +2,7 @@
 use_default_settings: true
 
 server:
-  port: 8080
+  port: 8081
   bind_address: "0.0.0.0"
   secret_key: "eclipse_research_secret_key_123" # Changed to avoid crash
   base_url: false

@@ -30,8 +30,16 @@ export async function searchSearxng(query: string, options: SearchOptions = {}):
     }
 
     try {
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': SEARXNG_URL
+            }
+        });
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`SearXNG request failed. URL: ${url.toString()}, Status: ${response.status}, Response: ${errorText}`);
             throw new Error(`SearXNG error: ${response.statusText}`);
         }
         const data = await response.json();

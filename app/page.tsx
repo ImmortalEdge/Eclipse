@@ -4,12 +4,17 @@ import { useState, KeyboardEvent, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '@/components/Sidebar';
 import BottomSearch from '@/components/BottomSearch';
+import ConversationalVoiceUI from '@/components/ConversationalVoiceUI';
 import AIResult from '@/components/AIResult';
 import ResearchProcess from '@/components/ResearchProcess';
 import CognitivePath from '@/components/CognitivePath';
 import MagneticButton from '@/components/MagneticButton';
-import ArchivePage, { saveToHistory } from '@/components/ArchivePage';
+import ArchivePage from '@/components/ArchivePage';
+import { saveToHistory, getHistoryItem } from '@/lib/history';
 import EclipseLogo from '@/components/EclipseLogo';
+import OnboardingLanguageScreen from '@/components/OnboardingLanguageScreen';
+import LanguageSettings from '@/components/LanguageSettings';
+import { useLanguage } from '@/components/LanguageProvider';
 import { SearchResult } from '../lib/search';
 import { LLMResponse } from '../lib/llm';
 import {
@@ -24,8 +29,18 @@ import {
   Plus,
   ChevronDown,
   Globe,
-  Radar
+  Radar,
+  Mic,
+  X,
+  FileText,
+  Search,
+  Sparkles,
+  History,
+  Settings,
+  Info,
 } from 'lucide-react';
+import { initSpeechRecognition } from '@/lib/voice';
+import SearchSuggestions from '@/components/SearchSuggestions';
 
 interface FinalResult {
   query: string;
@@ -48,22 +63,33 @@ interface Message {
 interface Session {
   id: string;
   title: string;
-  mode: "fast" | "research_extreme";
+  mode: "fast" | "research_extreme" | "deep";
   createdAt: string;
   messages: Message[];
 }
 
 export default function Home() {
+  const { t, language, hasSelectedLanguage, isRTL } = useLanguage();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
+  const [detectedUrls, setDetectedUrls] = useState<Array<{url: string; domain: string; content?: any}>>([]);
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [mode, setMode] = useState('fast');
   const [selectedModel, setSelectedModel] = useState('Grok 4.1 Fast');
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'archive'>('home');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isVoiceUIOpen, setIsVoiceUIOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [showLanguageSettings, setShowLanguageSettings] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const activeSession = sessions.find(s => s.id === activeSessionId) || null;
   const loading = activeSession?.messages.some(m => m.loading) || false;
@@ -92,16 +118,84 @@ export default function Home() {
     }
   }, [activeSessionId, activeSession?.messages.length, activeSession?.messages[activeSession?.messages.length - 1]?.streamEvents?.length]);
 
-  // Handle closing dropdown when clicking outside or pressing Escape
+  // URL detection function
+  const isURL = (text: string) => {
+    try {
+      new URL(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const extractDomain = (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  };
+
+  const fetchUrlContent = async (url: string) => {
+    setIsFetchingUrl(true);
+    setUrlError(null);
+    try {
+      const res = await fetch('/api/fetch-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (data.error) {
+        setUrlError(data.error);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      setUrlError('Could not fetch URL');
+      return null;
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  };
+
+  const handleQueryChange = async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setQuery(text);
+    
+    // Check for URLs
+    const words = text.split(/\s+/);
+    const urls = words.filter(isURL);
+    
+    if (urls.length > 0) {
+      // Get new URLs that aren't already detected
+      const newUrls = urls.filter(url => !detectedUrls.some(d => d.url === url));
+      
+      for (const url of newUrls) {
+        if (detectedUrls.length >= 3) break; // Max 3 URLs
+        const content = await fetchUrlContent(url);
+        if (content) {
+          setDetectedUrls(prev => [...prev, { url, domain: extractDomain(url), content }]);
+          // Clear the URL from query and update placeholder
+          const newQuery = text.replace(url, '').trim();
+          setQuery(newQuery);
+        }
+      }
+    }
+  };
+
+  const removeUrl = (urlToRemove: string) => {
+    setDetectedUrls(prev => prev.filter(d => d.url !== urlToRemove));
+  };
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) {
         setShowModeDropdown(false);
       }
     };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+    const handleEscape = (e: Event) => {
+      const event = e as unknown as KeyboardEvent;
+      if (event.key === 'Escape') {
         setShowModeDropdown(false);
       }
     };
@@ -116,13 +210,113 @@ export default function Home() {
     }
   }, [showModeDropdown]);
 
+  // Handle typing/idle detection for glow effect
+  useEffect(() => {
+    const handleKeyDown = () => {
+      setIsTyping(true);
+
+      // Clear existing timeout
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+
+      // Set new timeout to mark as idle after 2 seconds of no typing
+      idleTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 2000);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    const recognition = initSpeechRecognition();
+    if (!recognition) return;
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((r: any) => r[0].transcript)
+        .join('');
+
+      if (event.results[0].isFinal) {
+        setQuery(transcript);
+        setIsListening(false);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        console.warn('STT error:', event.error);
+      }
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      try {
+        recognition.stop();
+      } catch (e) { }
+    };
+  }, []);
+
+  const handleSTT = () => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) { }
+    } else {
+      try {
+        setIsListening(true);
+        recognitionRef.current.start();
+      } catch (e) {
+        console.warn('Failed to start recognition', e);
+        setIsListening(false);
+      }
+    }
+  };
+
   const handleSearch = async (searchQuery?: string, queryMode?: string) => {
     const q = searchQuery || query;
-    if (!q.trim()) return;
+    if (!q.trim() && detectedUrls.length === 0) return;
 
     const useMode = queryMode || mode;
     let currentSessionId = activeSessionId;
     let newSessions = [...sessions];
+    
+    // Build query with URL context
+    let finalQuery = q;
+    let urlContext = '';
+    
+    if (detectedUrls.length > 0) {
+      const urlsWithContent = detectedUrls.filter(u => u.content);
+      if (urlsWithContent.length > 0) {
+        urlContext = urlsWithContent.map(u => 
+          `Title: ${u.content.title}\nURL: ${u.url}\nContent: ${u.content.body.slice(0, 2000)}`
+        ).join('\n\n---\n\n');
+        
+        // If no question asked, auto-prompt for summary
+        if (!q.trim()) {
+          finalQuery = 'Summarize this page';
+        }
+        
+        finalQuery = `The user has shared this webpage:\n\n${urlContext}\n\nUser question: ${finalQuery}\n\nAnswer based on the webpage content. Be specific and cite details from the page.`;
+      }
+    }
 
     // 1. Determine Session
     if (!currentSessionId) {
@@ -159,12 +353,16 @@ export default function Home() {
     }));
 
     setQuery('');
+    
+    // Clear URLs after search
+    setDetectedUrls([]);
+    setUrlError(null);
 
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, mode: useMode, model: selectedModel })
+        body: JSON.stringify({ query: finalQuery, mode: useMode, model: selectedModel, language: language })
       });
 
       if (!response.body) throw new Error('No readable stream');
@@ -218,7 +416,8 @@ export default function Home() {
                           shortName: new URL(r.url).hostname.split('.')[0].toUpperCase(),
                           favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
                           url: r.url
-                        }))
+                        })),
+                        result: updatedResult
                       });
                     }
                     return { ...m, streamEvents: updatedEvents, streamingText: updatedStreamingText, result: updatedResult, loading: data.event !== 'complete' && m.loading };
@@ -272,6 +471,63 @@ export default function Home() {
     }
   };
 
+  const handleVoiceSearch = async (query: string, conversationContext: any[]): Promise<string | null> => {
+    if (!query.trim()) return null;
+
+    try {
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: query,
+          mode: 'fast',
+          model: selectedModel,
+          context: conversationContext
+        })
+      });
+
+      if (!response.ok) throw new Error('Search failed');
+
+      // Read the response to extract the final answer
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response stream');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalAnswer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            // Accumulate answer tokens
+            if (data.event === 'answer_token') {
+              finalAnswer += data.token;
+            } else if (data.event === 'result') {
+              // Get the final answer from the result
+              if (data.answer?.segments?.length > 0) {
+                finalAnswer = data.answer.segments.map((s: any) => s.text).join(' ');
+              }
+            }
+          }
+        }
+      }
+
+      return finalAnswer || 'No answer found';
+    } catch (error) {
+      console.error('Voice search error:', error);
+      return null;
+    }
+  };
+
   // Listen for selection menu search events
   useEffect(() => {
     const handleSelectionSearch = (e: any) => {
@@ -287,6 +543,11 @@ export default function Home() {
     };
   }, [handleSearch]);
 
+  const handleSuggestionSelect = (suggestion: string) => {
+    setQuery(suggestion);
+    // Keep focus on the textarea
+  };
+
   const resetSearch = () => {
     setActiveSessionId(null);
     setQuery('');
@@ -297,6 +558,7 @@ export default function Home() {
   const focusModes = [
     { id: 'fast', label: 'Velocity', description: 'Fast, concise answers', icon: Zap },
     { id: 'research_extreme', label: 'Research', description: 'Deep multi-source analysis', icon: Globe },
+    { id: 'deep', label: 'DEEP', description: 'Generative UI layout', icon: LayoutGrid },
   ];
 
   const suggestions = [
@@ -304,7 +566,13 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex h-screen bg-black text-white selection:bg-orange-500/30 font-sans overflow-hidden">
+    <>
+      {/* Language Onboarding - shown only on first visit */}
+      <AnimatePresence>
+        {!hasSelectedLanguage && <OnboardingLanguageScreen />}
+      </AnimatePresence>
+
+      <div className="flex h-screen bg-black text-white selection:bg-orange-500/30 font-sans overflow-hidden">
       <Sidebar
         onNew={resetSearch}
         onHistory={() => setCurrentView('archive')}
@@ -313,6 +581,8 @@ export default function Home() {
           setCurrentView('home');
         }}
         currentView={currentView}
+        currentMode={mode as 'fast' | 'research_extreme' | 'deep'}
+        onOpenLanguageSettings={() => setShowLanguageSettings(true)}
       />
 
       <main className="flex-1 flex flex-col relative overflow-y-auto pl-[50px]">
@@ -321,8 +591,30 @@ export default function Home() {
             <ArchivePage
               key="archive"
               onOpenItem={(id) => {
-                setActiveSessionId(id);
-                setCurrentView('home');
+                const historyItem = getHistoryItem(id);
+                if (historyItem && historyItem.result) {
+                  const newSession: Session = {
+                    id: Date.now().toString(),
+                    title: historyItem.query.length > 30 ? historyItem.query.substring(0, 30) + '...' : historyItem.query,
+                    mode: 'fast',
+                    createdAt: historyItem.timestamp,
+                    messages: [
+                      { id: '1', role: 'user', content: historyItem.query },
+                      {
+                        id: '2',
+                        role: 'assistant',
+                        query: historyItem.query,
+                        result: historyItem.result,
+                        loading: false,
+                        streamEvents: [],
+                        mode: 'fast'
+                      }
+                    ]
+                  };
+                  setSessions(prev => [newSession, ...prev]);
+                  setActiveSessionId(newSession.id);
+                  setCurrentView('home');
+                }
               }}
               onClose={() => setCurrentView('home')}
             />
@@ -336,184 +628,372 @@ export default function Home() {
             >
               {(!activeSessionId || activeSession?.messages.length === 0) && (
                 <>
-                  <div className="eclipse-glow" />
-                  <div className="eclipse-ring" />
+                  <div className={`eclipse-glow ${isTyping ? 'hidden' : ''}`} />
+                  <div className={`eclipse-ring ${isTyping ? 'hidden' : ''}`} />
                 </>
               )}
 
               {!activeSessionId ? (
-                <div className="flex-1 flex flex-col items-center justify-center -mt-20 px-6 relative z-10 w-full">
-                  <div className="w-full max-w-4xl flex flex-col items-center">
-                    {/* PLACEMENT 2: Homepage Hero Logo — animates once on mount */}
-                    <div className="flex flex-col items-center gap-6 mb-2" style={{ overflow: 'visible' }}>
-                      <EclipseLogo
-                        key="homepage-hero"
-                        size={72}
-                        animate={true}
-                        loop={false}
-                      />
+                <>
+                  <div className="flex-1 flex flex-col items-center justify-center -mt-20 px-6 relative z-10 w-full">
+                    <div className="w-full max-w-4xl flex flex-col items-center">
                       <motion.div
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 2, duration: 0.8, ease: 'easeOut' }}
-                        className="flex flex-col items-center gap-1"
+                        transition={{ delay: 0.2, duration: 0.8, ease: 'easeOut' }}
+                        className="flex flex-col items-center gap-1 mb-2"
                       >
                         <span className="text-[10px] font-bold text-[#e08b3a] tracking-[0.5em] uppercase opacity-70">
-                          Intelligence Horizon
+                          {t.intelligenceHorizon || "Intelligence Horizon"}
                         </span>
                       </motion.div>
-                    </div>
 
-                    <h1 className="text-[140px] text-zinc-100 text-center font-[family-name:var(--font-instrument-serif)] italic tracking-tighter leading-none mb-6 opacity-95 bg-gradient-to-b from-white via-white to-zinc-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(224,139,58,0.1)]">
-                      Eclipse
-                    </h1>
+                      <h1 className="text-[140px] text-zinc-100 text-center font-[family-name:var(--font-instrument-serif)] italic tracking-tighter leading-none mb-8 opacity-95 bg-gradient-to-b from-white via-white to-zinc-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(224,139,58,0.1)]">
+                        Eclipse
+                      </h1>
 
-                    <div className="w-full max-w-2xl bg-[#0d0d0e]/60 backdrop-blur-3xl border border-white/5 rounded-[32px] p-2 shadow-[0_30px_70px_rgba(0,0,0,0.7)] focus-within:border-[#e08b3a]/30 focus-within:shadow-[0_0_40px_rgba(224,139,58,0.08)] transition-all duration-700">
-                      <input
-                        type="text"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSearch(); }}
-                        placeholder="Deconstruct intelligence..."
-                        className="w-full bg-transparent border-none outline-none text-zinc-100 placeholder-zinc-800 text-[18px] px-8 py-7 font-[family-name:var(--font-instrument-serif)] italic leading-tight tracking-tight shadow-[inset_0_0_15px_rgba(224,139,58,0.02)] rounded-[24px] focus:shadow-[inset_0_0_20px_rgba(224,139,58,0.05)] transition-all"
-                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+                        className="text-[32px] font-[family-name:var(--font-instrument-serif)] italic text-center mb-6 tracking-tight text-[rgba(255,255,255,0.85)]"
+                        style={{ letterSpacing: '-0.02em' }}
+                      >
 
-                      <div className="flex items-center justify-between px-3 pb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="relative" ref={modeDropdownRef}>
+                      </motion.div>
+
+                      <div className="w-full max-w-[640px] relative" style={{ background: 'rgba(18,15,12,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', overflow: 'visible', position: 'relative' }}>
+                        {/* Gradient glow effect */}
+                        <div 
+                          className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-[80%] h-16 pointer-events-none"
+                          style={{
+                            background: 'radial-gradient(ellipse at center, rgba(224,139,58,0.4) 0%, rgba(245,166,35,0.2) 40%, transparent 70%)',
+                            filter: 'blur(20px)',
+                            zIndex: -1,
+                          }}
+                        />
+                        
+                        {/* URL Chips */}
+                        {detectedUrls.length > 0 && (
+                          <div className="flex flex-wrap gap-2 px-5 pt-4 pb-2">
+                            {detectedUrls.map((urlData, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs"
+                                style={{
+                                  background: 'rgba(245,166,35,0.08)',
+                                  border: '1px solid rgba(245,166,35,0.2)',
+                                }}
+                              >
+                                <Globe size={12} style={{ color: 'rgba(245,166,35,0.8)' }} />
+                                <span style={{ color: 'rgba(255,255,255,0.6)' }}>{urlData.domain}</span>
+                                {isFetchingUrl && index === detectedUrls.length - 1 ? (
+                                  <span style={{ color: 'rgba(245,166,35,0.6)', fontSize: '10px' }}>{t.searching || 'Reading...'}</span>
+                                ) : (
+                                  <button
+                                    onClick={() => removeUrl(urlData.url)}
+                                    className="ml-1 hover:opacity-70 transition-opacity"
+                                    style={{ color: 'rgba(255,255,255,0.4)' }}
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {urlError && (
+                          <div className="px-5 pt-2 text-xs" style={{ color: 'rgba(245,166,35,0.8)' }}>
+                            {urlError}
+                          </div>
+                        )}
+                        
+                        <textarea
+                          value={query}
+                          onChange={handleQueryChange}
+                          onFocus={() => setIsSearchFocused(true)}
+                          onBlur={() => setTimeout(() => setIsSearchFocused(false), 150)}
+                          onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSearch(); } }}
+                          placeholder={detectedUrls.length > 0 ? (t.askAnything || "Ask anything about this page...") : (t.placeholder || "Deconstruct intelligence...")}
+                          className="w-full bg-transparent border-none outline-none text-white text-[16px] px-5 py-5 font-[family-name:var(--font-instrument-serif)] italic leading-relaxed tracking-tight resize-none transition-all relative z-10"
+                          style={{
+                            color: '#ffffff',
+                            minHeight: '56px',
+                            padding: '18px 20px 12px 20px',
+                            caretColor: 'rgba(245,166,35,0.6)'
+                          }}
+                        />
+                        <style jsx>{`
+                        textarea::placeholder {
+                          color: rgba(255,255,255,0.2) !important;
+                        }
+                      `}</style>
+
+                        <div className="flex items-center justify-between px-3 pb-3 relative z-20">
+                          <div className="flex items-center gap-2">
+                            {/* File Upload Button */}
                             <MagneticButton
-                              onClick={() => setShowModeDropdown(!showModeDropdown)}
-                              className="px-3 py-2 rounded-full text-[11px] font-medium uppercase tracking-[0.08em] transition-all border flex items-center gap-2"
+                              onClick={() => document.getElementById('file-upload')?.click()}
+                              className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-medium transition-all"
+                              distance={20}
+                              strength={0.15}
                               style={{
-                                background: 'rgba(255,255,255,0.04)',
-                                border: showModeDropdown ? '1px solid rgba(228, 221, 209, 0.3)' : '1px solid rgba(255,255,255,0.08)',
-                                color: showModeDropdown ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'rgba(255,255,255,0.65)',
                               }}
-                              distance={25}
-                              strength={0.2}
                             >
-                              {mode === 'fast' ? <Zap size={12} className="opacity-80" /> : <Globe size={12} className="opacity-80" />}
-                              <span>{mode === 'fast' ? 'Velocity' : 'Research'}</span>
-                              <ChevronDown size={10} className={`ml-0 opacity-40 transition-transform duration-300 ${showModeDropdown ? 'rotate-180' : ''}`} />
+                              <Plus size={16} />
                             </MagneticButton>
+                            <input
+                              id="file-upload"
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                const files = e.target.files;
+                                if (files && files.length > 0) {
+                                  console.log('Files selected:', Array.from(files).map(f => f.name));
+                                  // TODO: Handle file upload
+                                }
+                              }}
+                            />
 
-                            <AnimatePresence>
-                              {showModeDropdown && (
-                                <motion.div
-                                  initial={{ opacity: 0, translateY: 4 }}
-                                  animate={{ opacity: 1, translateY: 0 }}
-                                  exit={{ opacity: 0, translateY: 4 }}
-                                  transition={{ duration: 0.15, ease: 'easeOut' }}
-                                  className="absolute bottom-full left-0 mb-3 rounded-xl p-1.5 z-50 backdrop-blur-xl"
-                                  style={{
-                                    background: '#1a1714',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    width: 'fit-content',
-                                    minWidth: '180px',
-                                    maxWidth: '220px'
-                                  }}
+                            <div className="relative" ref={modeDropdownRef}>
+                              <div
+                                style={{
+                                  background: 'rgba(255,255,255,0.06)',
+                                  borderRadius: '9999px',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  color: 'rgba(255,255,255,0.65)',
+                                }}
+                              >
+                                <MagneticButton
+                                  onClick={() => setShowModeDropdown(!showModeDropdown)}
+                                  className="px-3 py-2 text-[11px] font-medium uppercase tracking-[0.12em] transition-all flex items-center gap-2"
+                                  distance={25}
+                                  strength={0.2}
                                 >
-                                  {focusModes.map((fm) => {
-                                    const IconComponent = fm.icon;
-                                    const isActive = mode === fm.id;
-                                    return (
-                                      <button
-                                        key={fm.id}
-                                        onClick={() => {
-                                          setMode(fm.id);
-                                          setShowModeDropdown(false);
-                                        }}
-                                        className="w-full text-left transition-all duration-150"
-                                        style={{
-                                          padding: '10px 14px',
-                                          borderRadius: '8px',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '10px',
-                                          cursor: 'pointer',
-                                          position: 'relative',
-                                          background: 'transparent',
-                                          borderLeft: isActive ? '2px solid #F5A623' : 'none',
-                                          paddingLeft: isActive ? '12px' : '14px',
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          if (!isActive) {
-                                            (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
-                                          }
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          if (!isActive) {
-                                            (e.currentTarget as HTMLElement).style.background = 'transparent';
-                                          }
-                                        }}
-                                      >
-                                        <IconComponent
-                                          size={12}
-                                          style={{
-                                            color: isActive ? '#F5A623' : 'rgba(255,255,255,0.25)',
-                                            flexShrink: 0
+                                  {mode === 'fast' ? <Zap size={12} className="opacity-80" /> : mode === 'research_extreme' ? <Globe size={12} className="opacity-80" /> : <LayoutGrid size={12} className="opacity-80" />}
+                                  <span>{mode === 'fast' ? (t.velocity || 'Velocity') : mode === 'research_extreme' ? (t.research || 'Research') : 'DEEP'}</span>
+                                  <ChevronDown size={10} className={`ml-0 opacity-40 transition-transform duration-300 ${showModeDropdown ? 'rotate-180' : ''}`} />
+                                </MagneticButton>
+                              </div>
+
+                              <AnimatePresence>
+                                {showModeDropdown && (
+                                  <motion.div
+                                    initial={{ opacity: 0, translateY: 8, scale: 0.95 }}
+                                    animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                                    exit={{ opacity: 0, translateY: 8, scale: 0.95 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                    className="absolute bottom-full left-0 mb-3 rounded-2xl p-2 z-50 backdrop-blur-xl"
+                                    style={{
+                                      background: 'linear-gradient(135deg, rgba(20,18,14,0.95) 0%, rgba(25,22,18,0.95) 100%)',
+                                      border: '1px solid rgba(224,139,58,0.2)',
+                                      boxShadow: '0 8px 32px rgba(224,139,58,0.15), inset 0 1px 1px rgba(255,255,255,0.1)',
+                                      width: 'fit-content',
+                                      minWidth: '200px',
+                                      maxWidth: '240px'
+                                    }}
+                                  >
+                                    {focusModes.map((fm, idx) => {
+                                      const IconComponent = fm.icon;
+                                      const isActive = mode === fm.id;
+                                      return (
+                                        <button
+                                          key={fm.id}
+                                          onClick={() => {
+                                            setMode(fm.id);
+                                            setShowModeDropdown(false);
                                           }}
-                                        />
-                                        <div className="flex flex-col flex-1 min-w-0">
-                                          <span
+                                          className="w-full text-left transition-all duration-200"
+                                          style={{
+                                            padding: '12px 14px',
+                                            marginBottom: idx < focusModes.length - 1 ? '4px' : '0',
+                                            borderRadius: '12px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            cursor: 'pointer',
+                                            position: 'relative',
+                                            background: isActive ? 'linear-gradient(135deg, rgba(224,139,58,0.15) 0%, rgba(224,139,58,0.08) 100%)' : 'transparent',
+                                            border: isActive ? '1px solid rgba(224,139,58,0.3)' : '1px solid transparent',
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isActive) {
+                                              (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)';
+                                              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(224,139,58,0.2)';
+                                            }
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isActive) {
+                                              (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                              (e.currentTarget as HTMLElement).style.borderColor = 'transparent';
+                                            }
+                                          }}
+                                        >
+                                          <IconComponent
+                                            size={14}
                                             style={{
-                                              fontSize: '11px',
-                                              letterSpacing: '0.12em',
-                                              fontWeight: 500,
-                                              textTransform: 'uppercase',
-                                              color: isActive ? 'white' : 'rgba(255,255,255,0.4)',
+                                              color: isActive ? '#e08b3a' : 'rgba(255,255,255,0.35)',
+                                              flexShrink: 0
                                             }}
-                                          >
-                                            {fm.label}
-                                          </span>
-                                          {isActive && fm.description && (
+                                          />
+                                          <div className="flex flex-col flex-1 min-w-0">
+                                            <span
+                                              style={{
+                                                fontSize: '12px',
+                                                letterSpacing: '0.1em',
+                                                fontWeight: 600,
+                                                textTransform: 'uppercase',
+                                                color: isActive ? '#ffffff' : 'rgba(255,255,255,0.5)',
+                                              }}
+                                            >
+                                              {fm.label}
+                                            </span>
                                             <span
                                               style={{
                                                 fontSize: '10px',
                                                 letterSpacing: '0.05em',
-                                                color: 'rgba(255,255,255,0.25)',
+                                                color: isActive ? 'rgba(224,139,58,0.8)' : 'rgba(255,255,255,0.3)',
                                                 marginTop: '2px'
                                               }}
                                             >
                                               {fm.description}
                                             </span>
-                                          )}
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          </div>
+
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            position: 'relative', zIndex: 30, flexShrink: 0
+                          }}>
+
+                            {/* MIC / STT */}
+                            <button type="button" onClick={handleSTT}
+                              style={{
+                                width: 44, height: 44, borderRadius: '50%',
+                                background: 'radial-gradient(circle at 35% 30%, rgba(180,160,255,0.22) 0%, rgba(10,8,7,0.96) 72%)',
+                                border: '1px solid rgba(180,160,255,0.25)',
+                                cursor: 'pointer', flexShrink: 0,
+                                display: 'flex', alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: isListening
+                                  ? '0 0 28px rgba(180,160,255,0.35)'
+                                  : 'none',
+                                transition: 'all 200ms ease',
+                              }}>
+                              <Mic size={16} color="rgba(255,255,255,0.75)" />
+                            </button>
+
+                            {/* SMART SEND */}
+                            <button type="button"
+                              onClick={() => {
+                                if (query.trim()) {
+                                  handleSearch();
+                                } else {
+                                  setIsVoiceUIOpen(true);
+                                }
+                              }}
+                              style={{
+                                width: 44, height: 44, borderRadius: '50%',
+                                background: query.trim().length > 0
+                                  ? 'radial-gradient(circle at 38% 32%, rgba(245,166,35,0.38) 0%, rgba(10,8,7,0.97) 68%)'
+                                  : 'radial-gradient(circle at 38% 32%, rgba(245,166,35,0.18) 0%, rgba(10,8,7,0.97) 68%)',
+                                border: `1px solid rgba(245,166,35,${query.trim().length > 0 ? 0.5 : 0.2})`,
+                                cursor: 'pointer', flexShrink: 0,
+                                display: 'flex', alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: query.trim().length > 0
+                                  ? '0 0 28px rgba(245,166,35,0.25)'
+                                  : '0 0 16px rgba(245,166,35,0.08)',
+                                transition: 'all 200ms ease',
+                              }}>
+                              {query.trim().length > 0
+                                ? <ArrowUp size={17} color="rgba(255,255,255,0.95)" />
+                                : <div style={{
+                                  display: 'flex', alignItems: 'flex-end',
+                                  gap: '3px', height: '18px'
+                                }}>
+                                  {[
+                                    { dur: '0.7s', delay: '0s' },
+                                    { dur: '0.5s', delay: '0.15s' },
+                                    { dur: '0.9s', delay: '0.3s' },
+                                  ].map((b, i) => (
+                                    <div key={i} style={{
+                                      width: '3px', borderRadius: '999px',
+                                      background: 'rgba(245,166,35,0.85)',
+                                      animation: `barPulse ${b.dur} ease-in-out ${b.delay} infinite alternate`,
+                                    }} />
+                                  ))}
+                                </div>
+                              }
+                            </button>
                           </div>
                         </div>
 
-                        <MagneticButton
-                          onClick={() => handleSearch()}
-                          className="p-3.5 bg-white text-black rounded-full shadow-[0_0_30px_rgba(255,255,255,0.2)] active:scale-95 transition-all group"
-                          distance={25}
-                          strength={0.15}
-                        >
-                          <ArrowUp size={18} strokeWidth={3} className="group-hover:-translate-y-0.5 transition-transform" />
-                        </MagneticButton>
+                        {/* Search Suggestions Dropdown */}
+                        <SearchSuggestions
+                          query={query}
+                          onSelect={handleSuggestionSelect}
+                          isVisible={isSearchFocused}
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-[640px]">
+                        {suggestions.map((s, i) => (
+                          <MagneticButton
+                            key={i}
+                            onClick={() => handleSearch(s)}
+                            className="group transition-all duration-150"
+                            distance={12}
+                            strength={0.1}
+                            style={{
+                              padding: '6px 14px',
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.07)',
+                              borderRadius: '9999px',
+                              fontSize: '12px',
+                              color: 'rgba(255,255,255,0.5)',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
+                              (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.8)';
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)';
+                              (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)';
+                            }}
+                          >
+                            <span style={{ color: 'rgba(245,166,35,0.6)', fontSize: '10px' }}>✦</span>
+                            {s}
+                          </MagneticButton>
+                        ))}
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-3 mt-10 max-w-xl">
-                      {suggestions.map((s, i) => (
-                        <MagneticButton
-                          key={i}
-                          onClick={() => handleSearch(s)}
-                          className="px-4 py-2 rounded-2xl bg-zinc-900/40 border border-zinc-800/60 text-[10px] text-zinc-500 font-bold tracking-tight hover:text-white hover:border-[#e08b3a]/40 hover:bg-gradient-to-br hover:from-[#e08b3a]/5 hover:to-transparent transition-all duration-300"
-                          distance={15}
-                          strength={0.12}
-                        >
-                          {s}
-                        </MagneticButton>
-                      ))}
-                    </div>
                   </div>
-                </div>
+
+                  <ConversationalVoiceUI
+                    isOpen={isVoiceUIOpen}
+                    onClose={() => setIsVoiceUIOpen(false)}
+                    onSearch={handleVoiceSearch}
+                    loading={loading}
+                    t={t}
+                  />
+                </>
               ) : (
                 <div className="w-full max-w-4xl mx-auto flex-1 flex flex-col pt-20 pb-40 px-4 md:px-8">
                   <div className="flex flex-col gap-4">
@@ -561,7 +1041,7 @@ export default function Home() {
                             ) : (
                               m.result && (
                                 <div className="w-full">
-                                  <AIResult result={m.result} onSearch={handleSearch} isStreaming={false} />
+                                  <AIResult result={m.result} onSearch={handleSearch} isStreaming={!!m.loading} />
                                 </div>
                               )
                             )}
@@ -578,15 +1058,31 @@ export default function Home() {
                         onSearch={handleSearch}
                         loading={loading}
                         onReset={resetSearch}
+                        onOpenVoiceUI={() => setIsVoiceUIOpen(true)}
+                        isSearchFocused={query.length > 0}
                       />
                     </div>
                   </div>
+
+                  <ConversationalVoiceUI
+                    isOpen={isVoiceUIOpen}
+                    onClose={() => setIsVoiceUIOpen(false)}
+                    onSearch={handleVoiceSearch}
+                    loading={loading}
+                    t={t}
+                  />
                 </div>
               )}
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+
+      <LanguageSettings
+        isOpen={showLanguageSettings}
+        onClose={() => setShowLanguageSettings(false)}
+      />
     </div>
+    </>
   );
 }

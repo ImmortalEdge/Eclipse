@@ -242,7 +242,7 @@ export default function KnowledgeStack({ results }: { results: any[] }) {
                 ref={stackRef}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                className="relative w-full h-[220px] cursor-ns-resize perspective-1000"
+                className="relative w-full min-h-[140px] cursor-ns-resize perspective-1000"
             >
                 <div className="absolute -inset-10 bg-[radial-gradient(circle_at_50%_50%,_rgba(245,166,35,0.02)_0%,_transparent_70%)] pointer-events-none" />
 

@@ -28,14 +28,18 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import KnowledgeStack from './KnowledgeStack';
+import StackedCards from './StackedCards';
 import Citation, { CitationData } from './Citation';
 import CalculatorWidget from './CalculatorWidget';
 import NearbyMapWidget from './NearbyMapWidget';
 import StockWidget from './StockWidget';
 import EclipseLogo from './EclipseLogo';
+import DeepModeRenderer from './DeepModeRenderer';
 import { detectCalculatorIntent, parseExpression, CalcResult } from '@/lib/calculator';
 import { detectNearbyIntent, NearbyIntent } from '@/lib/map';
 import { detectStockIntent, StockDetectResult } from '@/lib/stock';
+
+import { useLanguage } from './LanguageProvider';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -67,7 +71,10 @@ const SourceBadge = ({ source }: { source: any }) => {
     return <Citation data={citationData} />;
 };
 
+import { useIsMobile } from '@/lib/hooks';
+
 export default function AIResult({ result, onSearch, isStreaming = false }: { result: any; onSearch?: (query: string) => void; isStreaming?: boolean }) {
+    const { t } = useLanguage();
     const [showSources, setShowSources] = useState(false);
     const [calcData, setCalcData] = useState<CalcResult | null>(null);
     const [nearbyData, setNearbyData] = useState<NearbyIntent | null>(null);
@@ -93,17 +100,22 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
             return;
         }
 
+        // Extract actual user question (not the URL-augmented query)
+        const userQuestion = query.includes('User question:') 
+            ? query.split('User question:')[1].trim() 
+            : query;
+
         // 1. Check for Calculator Intent
-        if (detectCalculatorIntent(query)) {
-            const parsed = parseExpression(query);
+        if (detectCalculatorIntent(userQuestion)) {
+            const parsed = parseExpression(userQuestion);
             setCalcData(parsed);
             setNearbyData(null);
             setStockData(null);
             return;
         }
 
-        // 2. Check for Stock Intent
-        const stock = detectStockIntent(query);
+        // 2. Check for Stock Intent (only on user question, not URL content)
+        const stock = detectStockIntent(userQuestion);
         if (stock.isStock) {
             setStockData(stock);
             setCalcData(null);
@@ -112,7 +124,7 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
         }
 
         // 3. Check for Nearby/Map Intent
-        const nearby = detectNearbyIntent(query);
+        const nearby = detectNearbyIntent(userQuestion);
         if (nearby.isNearby) {
             setNearbyData(nearby);
             setCalcData(null);
@@ -147,14 +159,122 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
         return () => container.removeEventListener('wheel', handleWheel);
     }, [isExpanded]);
 
+    const isMobile = useIsMobile();
+
     const segments = answer?.segments || [];
     const longFormAnswerSegments = answer?.longFormAnswerSegments || [];
     const keyInsight = answer?.keyInsight || "Analyzing results...";
     const cards = answer?.cards || [];
     const followUps = answer?.followUps || [];
 
+    if (isMobile) {
+        return (
+            <div ref={containerRef} className="p-4 pb-[140px] w-full max-w-[100vw] overflow-x-hidden animate-in fade-in slide-in-from-bottom-4 duration-700 relative flex flex-col pt-4">
+                {/* Mobile Editorial Title */}
+                <h1 className="text-[28px] font-[family-name:var(--font-instrument-serif)] italic text-white mb-6 leading-[1.15] tracking-tight">
+                    {query?.includes('USER QUESTION:') ? query.split('USER QUESTION:')[1].trim() : query}
+                </h1>
+
+                {/* Mobile Sources Horizontal Scroll */}
+                <div className="mb-8 -mx-4">
+                    <div className="flex items-center gap-2 px-4 mb-4">
+                        <div className="p-1 bg-[#f5a623]/10 rounded border border-[#f5a623]/20">
+                            <Layers size={10} className="text-[#f5a623]" />
+                        </div>
+                        <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Origins Captured</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 px-4 pb-4">
+                        {results?.map((source: any, i: number) => (
+                            <a
+                                key={i}
+                                href={source.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 w-full rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4 flex flex-col gap-2 shadow-xl backdrop-blur-sm"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-lg bg-zinc-900 border border-white/[0.05] flex items-center justify-center shrink-0">
+                                        <img
+                                            src={`https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=32`}
+                                            alt=""
+                                            className="w-3 h-3 grayscale opacity-60"
+                                        />
+                                    </div>
+                                    <span className="text-[9px] font-bold text-zinc-500 uppercase truncate">
+                                        {new URL(source.url).hostname.replace('www.', '')}
+                                    </span>
+                                </div>
+                                <h3 className="text-[12px] font-medium text-white/90 line-clamp-2 leading-tight font-[family-name:var(--font-instrument-serif)] italic">
+                                    {source.title}
+                                </h3>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Intelligence Core (Moved up on Mobile for Focus) */}
+                <div className="mb-8">
+                    <div className="glass-morphic bg-[#0b0b0b]/60 border border-[#e08b3a]/20 rounded-xl p-4 relative overflow-hidden w-full">
+                        <div className="absolute top-0 right-0 w-48 h-48 bg-[#e08b3a]/5 blur-[60px] rounded-full -mr-24 -mt-24" />
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-1 px-1.5 bg-[#e08b3a]/10 rounded border border-[#e08b3a]/20">
+                                <TrendingUp size={10} className="text-[#e08b3a]" />
+                            </div>
+                            <span className="text-[9px] font-black text-[#e08b3a] tracking-[0.3em] uppercase">Intelligence Core</span>
+                        </div>
+                        <div className="text-zinc-100 text-[18px] leading-[1.4] font-medium font-[family-name:var(--font-instrument-serif)] italic">
+                            {keyInsight}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile Prose Synthesis */}
+                <div className="prose-editorial text-zinc-200 text-[15px] leading-[1.8] mb-12 space-y-4 word-break break-word overflow-wrap-break-word">
+                    {segments.map((s: any, i: number) => (
+                        <p key={i} className="mb-2">
+                            {s.text}
+                            <SourceBadge source={s.source} />
+                        </p>
+                    ))}
+                </div>
+
+                {/* Charts/Widgets Placeholder Fix */}
+                {(calcData || nearbyData || stockData) && (
+                    <div className="mb-8 w-full overflow-x-auto no-scrollbar">
+                        {/* Widgets would render here if active, forced 100% width via globals.css or local styles if possible */}
+                    </div>
+                )}
+
+                {/* Long-form Answer */}
+                {longFormAnswerSegments.length > 0 && (
+                    <div className="prose-editorial text-zinc-400 text-[15px] leading-[1.8] mb-12 space-y-6 word-break break-word overflow-wrap-break-word">
+                        {longFormAnswerSegments.map((s: any, i: number) => (
+                            <div key={i} className="mb-2">
+                                {s.text}
+                                <SourceBadge source={s.source} />
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Action Bar */}
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/[0.05]">
+                    <div className="flex gap-4 text-zinc-500">
+                        <button onClick={() => navigator.clipboard.writeText(query)}><Share2 size={16} /></button>
+                        <button onClick={() => onSearch?.(query)}><RotateCcw size={16} /></button>
+                        <button onClick={() => navigator.clipboard.writeText(answer?.segments?.map((s: any) => s.text).join(' '))}><Copy size={16} /></button>
+                    </div>
+                    <div className="flex gap-4 text-zinc-500">
+                        <ThumbsUp size={16} />
+                        <ThumbsDown size={16} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div ref={containerRef} className="pb-32 animate-in fade-in slide-in-from-bottom-4 duration-700 relative w-full max-w-3xl mx-auto">
+        <div ref={containerRef} className="pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 relative w-full max-w-3xl mx-auto">
 
             {/* Top Sources Carousel Section */}
             <div className="mb-6 w-full">
@@ -196,7 +316,7 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
                                 onClick={(e) => { e.stopPropagation(); setShowSources(true); }}
                                 className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-500 hover:text-white transition-colors uppercase tracking-widest group/all"
                             >
-                                View all <ChevronRight size={12} className="group-hover/all:translate-x-0.5 transition-transform" />
+                                {(t.sources || 'View all')} <ChevronRight size={12} className="group-hover/all:translate-x-0.5 transition-transform" />
                             </button>
                         </div>
                     </div>
@@ -310,47 +430,60 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
             </AnimatePresence>
 
             {!calcData && !nearbyData && !stockData && (
-                <h1 className="text-4xl font-medium text-white mb-8 tracking-tight leading-tight font-sans">
-                    {query}
+                <h1 className="text-[32px] md:text-[40px] font-bold text-white mb-8 tracking-tight leading-tight">
+                    {query?.includes('USER QUESTION:') ? query.split('USER QUESTION:')[1].trim() : query}
                 </h1>
             )}
 
-            {/* Summary Box */}
-            <div className="prose prose-invert max-w-none mb-12">
-                <div className="text-zinc-300 text-lg leading-relaxed font-sans">
-                    {segments.map((s: any, i: number) => (
-                        <span key={i}>
-                            {s.text}
-                            <SourceBadge source={s.source} />
-                        </span>
-                    ))}
+            {/* DEEP mode: if AI returned a layout, render DeepModeRenderer */}
+            {answer?.layout ? (
+                <div className="mb-8">
+                    <DeepModeRenderer summary={answer.summary || answer.keyInsight || keyInsight} components={answer.layout.components || answer.layout?.components || []} loading={isStreaming} />
                 </div>
-            </div>
-
-            {/* Key Insight Box */}
-            <div className="bg-[#0b0b0b] border border-[#e08b3a]/20 rounded-[32px] p-8 mb-12 relative overflow-hidden group shadow-[0_0_40px_rgba(224,139,58,0.03)]">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#e08b3a]/5 blur-[100px] rounded-full -mr-32 -mt-32 group-hover:bg-[#e08b3a]/10 transition-colors duration-1000" />
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#e08b3a]/3 blur-[60px] rounded-full -ml-16 -mb-16" />
-
-                <div className="flex items-center gap-3 mb-6 relative z-10">
-                    <div className="p-1.5 bg-[#e08b3a]/10 rounded-lg">
-                        <TrendingUp size={12} className="text-[#e08b3a] stroke-[3]" />
+            ) : (
+                <>
+                    {/* Summary Box */}
+                    <div className="prose prose-invert max-w-none mb-12">
+                        <div className="text-zinc-300 text-[16px] md:text-[17px] leading-relaxed font-sans">
+                            {segments.map((s: any, i: number) => (
+                                <span key={i} className="inline mr-1">
+                                    {s.text}
+                                    <SourceBadge source={s.source} />
+                                </span>
+                            ))}
+                        </div>
                     </div>
-                    <span className="text-[10px] font-black text-[#e08b3a] tracking-[0.4em] uppercase">Intelligence Core</span>
-                </div>
-                <div className="text-zinc-100 text-[24px] leading-[1.3] font-medium max-w-[90%] relative z-10 font-[family-name:var(--font-instrument-serif)] italic">
-                    {keyInsight}
-                </div>
-            </div>
+                </>
+            )}
 
-            {/* Generative Intelligence Stack - Autonomous Neural Stacking */}
-            <div className="mb-4">
-                <KnowledgeStack results={results || []} />
-            </div>
+
+            {/* Intelligence Core & Stack - Relocated to follow summary for maximum impact */}
+            {!answer?.layout && (
+                <div className="mt-8 mb-12">
+                    <div className="bg-[#0b0b0b] border border-[#e08b3a]/20 rounded-[32px] p-8 mb-8 relative overflow-hidden group shadow-[0_0_40px_rgba(224,139,58,0.03)]">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-[#e08b3a]/5 blur-[100px] rounded-full -mr-32 -mt-32 group-hover:bg-[#e08b3a]/10 transition-colors duration-1000" />
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#e08b3a]/3 blur-[60px] rounded-full -ml-16 -mb-16" />
+
+                        <div className="flex items-center gap-3 mb-6 relative z-10">
+                            <div className="p-1.5 bg-[#e08b3a]/10 rounded-lg">
+                                <TrendingUp size={12} className="text-[#e08b3a] stroke-[3]" />
+                            </div>
+                            <span className="text-[10px] font-black text-[#e08b3a] tracking-[0.4em] uppercase">Intelligence Core</span>
+                        </div>
+                        <div className="text-zinc-100 text-[20px] md:text-[24px] leading-[1.4] font-medium max-w-[95%] relative z-10 font-[family-name:var(--font-instrument-serif)] italic transition-all duration-700">
+                            {keyInsight || "Synthesizing atmospheric insights..."}
+                        </div>
+                    </div>
+
+                    <div className="mb-4">
+                        <KnowledgeStack results={results || []} />
+                    </div>
+                </div>
+            )}
 
             {/* Detailed Long-form Answer */}
             {longFormAnswerSegments.length > 0 && (
-                <div className="mb-24 prose prose-invert max-w-none">
+                <div className="mb-12 prose prose-invert max-w-none">
                     <div className="text-zinc-400 text-[16px] leading-[1.7] font-sans h-auto">
                         {longFormAnswerSegments.map((s: any, i: number) => (
                             <div key={i} className="mb-4 last:mb-0">
@@ -361,6 +494,8 @@ export default function AIResult({ result, onSearch, isStreaming = false }: { re
                     </div>
                 </div>
             )}
+
+            {/* Bottom section spacing cleanup */}
 
             {/* Action Bar & Source Count - Premium Layout */}
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-900 px-1">

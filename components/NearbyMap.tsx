@@ -65,7 +65,8 @@ export default function NearbyMap({
                     ref={mapRef}
                 >
                     <TileLayer
-                        url="https://{s}.basemap.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                        url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
+                        attribution="© Stadia Maps © OpenMapTiles © OpenStreetMap"
                     />
                     {bounds && <ChangeView bounds={bounds} />}
                     {places.map((place) => {

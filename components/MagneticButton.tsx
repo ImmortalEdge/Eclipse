@@ -6,11 +6,14 @@ import { motion, useSpring, useMotionValue, useTransform } from 'framer-motion';
 interface MagneticButtonProps {
     children: React.ReactNode;
     className?: string;
-    onClick?: () => void;
+    onClick?: () => void | Promise<void>;
     distance?: number;
     strength?: number;
     disabled?: boolean;
     type?: "button" | "submit" | "reset";
+    style?: React.CSSProperties;
+    onMouseEnter?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+    onMouseLeave?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 export default function MagneticButton({
@@ -20,7 +23,10 @@ export default function MagneticButton({
     distance = 60,
     strength = 0.4,
     disabled = false,
-    type = "button"
+    type = "button",
+    style: externalStyle,
+    onMouseEnter: externalMouseEnter,
+    onMouseLeave: externalMouseLeave,
 }: MagneticButtonProps) {
     const ref = useRef<HTMLButtonElement>(null);
 
@@ -69,16 +75,18 @@ export default function MagneticButton({
         }
     };
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsHovered(false);
         x.set(0);
         y.set(0);
         mouseX.set(0);
         mouseY.set(0);
+        externalMouseLeave?.(e);
     };
 
-    const handleMouseEnter = () => {
+    const handleMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
         setIsHovered(true);
+        externalMouseEnter?.(e);
     };
 
     return (
@@ -93,6 +101,7 @@ export default function MagneticButton({
             style={{
                 x: springX,
                 y: springY,
+                ...externalStyle,
             }}
             className={`relative group touch-none active:scale-95 transition-scale duration-200 ${className}`}
         >

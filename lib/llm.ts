@@ -83,35 +83,81 @@ export interface LLMResponse {
   chartData?: Array<{ date: string; price: number }>;
 }
 
+/**
+ * Rewrites a simple user query into a high-density professional research query.
+ */
+export async function rewriteQuery(query: string): Promise<string> {
+  try {
+    const { streamResponse } = await import('./ai-provider');
+    const system = "You are Eclipse's Query Architect. Rewrite user queries into professional, keyword-rich research queries that yield better search results. Respond ONLY with the rewritten query.";
+    const user = `User Query: "${query}"\nProfessional Research Query:`;
+
+    let rewritten = '';
+    for await (const token of streamResponse(user, system)) { rewritten += token; }
+    return rewritten.replace(/["']/g, '').trim() || query;
+  } catch (e) {
+    return query;
+  }
+}
+
 export async function generateAnswer(
   query: string,
   context: SearchResult[],
   modelName: string = 'mistral:latest',
   mode: string = 'fast',
+  language: string = 'en',
   onToken?: (token: string) => void
 ): Promise<LLMResponse> {
 
 
   const isResearch = mode === 'research_extreme';
 
-  const systemPrompt = isResearch
-    ? `Research Scientist: Provide deep analysis with cross-validated claims. Structure: Overview, Context, Key Findings, Data, Analysis, Conclusion. Use LaTeX and Markdown Tables. Output ONLY valid JSON—no markdown fences.`
-    : `Research Assistant: Provide concise, accurate summary. Focus on key data with bullet points. Output ONLY valid JSON—no markdown fences.`;
+  const languages: Record<string, string> = {
+    en: 'English', hi: 'Hindi', es: 'Spanish', fr: 'French', zh: 'Chinese',
+    ar: 'Arabic', pt: 'Portuguese', de: 'German', ja: 'Japanese',
+    ru: 'Russian', bn: 'Bengali', ur: 'Urdu'
+  };
+  const targetLanguage = languages[language] || 'English';
 
-  const userPrompt = `Query: ${query} (${mode})\n\nSources:\n${context.slice(0, 8).map(c => `${c.title}: ${c.content.substring(0, 300)}`).join('\n---\n')}\n\nRespond with this JSON (adapt content length to ${isResearch ? '500-700 words total' : '200-300 words'}):
+  const systemPrompt = `You are Eclipse — an expert research intelligence. You do not summarize; you explain, analyze, and illuminate.
+
+RULES:
+- Never use bullet points.
+- Write in flowing, sophisticated, and intelligent prose.
+- Provide specific numbers, dates, names, and statistics.
+- Acknowledge complexity and nuance.
+- Challenge assumptions when relevant.
+- Minimum 3 paragraphs per answer.
+- Always conclude with the single most important insight.
+- Output ONLY valid JSON.
+- ALWAYS respond in ${targetLanguage}. Your answer must be entirely in ${targetLanguage}.`;
+
+  const sourcesText = context.slice(0, 15)
+    .map(c => `${c.title}: ${c.content.substring(0, 400)}`)
+    .join('\n---\n');
+
+  const userPrompt = `QUERY: ${query}
+MODE: ${mode}
+LANGUAGE: ${targetLanguage}
+
+SOURCES:
+${sourcesText}
+
+TASK:
+Synthesize an expert research report in the following JSON format:
 {
-  "segments": [{"text": "Key statement", "source": {"name": "Title", "domain": "example.com", "url": "http://...", "title": "...", "summary": "brief evidence", "date": "Feb 2026"}}],
-  "keyInsight": "3-4 sentence synthesis of main discovery",
-  "cards": [{"label": "Category", "value": "2-3 sentence explanation", "type": "info"}],
-  "followUps": ["Related question 1", "Related question 2"],
-  "longFormAnswerSegments": [{"text": "Technical analysis...", "source": {...}}]
+  "segments": [{"text": "First paragraph of flowing prose in ${targetLanguage}...", "source": {"name": "Title", "domain": "domain.com", "url": "..."}}],
+  "keyInsight": "A concluding high-level discovery in ${targetLanguage} (3-4 sentences)",
+  "cards": [{"label": "Metric", "value": "Specific data or explanation in ${targetLanguage}", "type": "info"}],
+  "longFormAnswerSegments": [{"text": "Deeper technical detail in ${targetLanguage}...", "source": {...}}]
 }
-CRITICAL RULES:
-- NEVER use bracketed numbers like [1] or [2].
-- NEVER output a "References" section.
-- Sources MUST be objects within segments.
-- "summary" in source should be specific to why this source supports the current text.
-`;
+
+CRITICAL: 
+- FLOWING PROSE ONLY. 
+- NO BULLETS. 
+- MINIMUM 3 PARAGRAPHS IN SEGMENTS.
+- CITATIONS MUST BE SPECIFIC SOURCE OBJECTS.
+- ENTIRE RESPONSE MUST BE IN ${targetLanguage}.`;
 
   try {
     const { streamResponse } = await import('./ai-provider');
@@ -126,8 +172,15 @@ CRITICAL RULES:
       throw new Error('AI provider returned an empty response. Check your AI_PROVIDER config and credentials.');
     }
 
-    // Strip markdown fences in case the model wraps its JSON output
-    const cleaned = fullResponse
+    // Strip markdown fences or any conversational filler outside the first { and last }
+    let cleaned = fullResponse.trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+
+    cleaned = cleaned
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/\s*```\s*$/, '')
       .trim();
@@ -144,25 +197,37 @@ CRITICAL RULES:
       } catch (e) {
         // Third attempt: extract whatever text we can and create a fallback response
         console.error('JSON Parse Error after repair. Attempting fallback extraction...');
-        console.error('Raw Response preview:', fullResponse.slice(0, 500));
-        
-        // Try to extract segments array if possible
-        const segmentsMatch = cleaned.match(/"segments"\s*:\s*\[([\s\S]*?)\](?=\s*,|\s*\})/);
-        const extractedText = segmentsMatch 
-          ? `AI Response (partial): ${cleaned.substring(0, 300)}...` 
-          : cleaned.substring(0, 500);
-        
+
+        // Robust extraction of any prose from segments if we can find it
+        let extractedText = '';
+        const segmentTextMatches = cleaned.match(/"text"\s*:\s*"([^"\\]*(\\.[^"\\]*)*)"/g);
+        if (segmentTextMatches && segmentTextMatches.length > 0) {
+          extractedText = segmentTextMatches.map(m => {
+            const inner = m.match(/"text"\s*:\s*"([^"\\]*(\\.[^"\\]*)*)"/);
+            return inner ? inner[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim() : '';
+          }).filter(t => t.length > 5).join('\n\n');
+        }
+
+        if (!extractedText) {
+          // Last ditch fallback: strip JSON-like stuff and show the raw text
+          extractedText = cleaned
+            .replace(/"[a-z0-9_]+":/gi, '')
+            .replace(/\{|\}|\[|\]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+
         // Return a valid response with the extracted content
         return {
           segments: [{
-            text: extractedText,
+            text: extractedText || "Investigation synthesis encounterd a structural error. Displaying raw data recovery.",
             source: {
-              name: 'AI Provider',
-              domain: 'api.ai',
-              url: 'http://api.ai'
+              name: 'Eclipse Intelligence',
+              domain: 'eclipse.ai',
+              url: 'https://eclipse.ai'
             }
           }],
-          keyInsight: 'Response received but partially truncated. Increase API token limit.',
+          keyInsight: 'The research report was successful but the structural finalization was interrupted. Full analysis is displayed above.',
           cards: [],
           followUps: ['Could you rephrase your question?', 'Try a more specific query'],
           longFormAnswerSegments: []

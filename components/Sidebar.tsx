@@ -1,9 +1,11 @@
 'use client';
 
-import { Plus, History, Zap, Microscope } from 'lucide-react';
+import { Plus, History, Zap, Microscope, LayoutGrid, Globe } from 'lucide-react';
 import EclipseLogo from './EclipseLogo';
+import AccountPanel from './AccountPanel';
+import { useLanguage } from './LanguageProvider';
 
-type Mode = 'fast' | 'research_extreme';
+type Mode = 'fast' | 'research_extreme' | 'deep';
 
 interface SidebarProps {
   onNew: () => void;
@@ -11,6 +13,7 @@ interface SidebarProps {
   onModeChange: (mode: Mode) => void;
   currentView: 'home' | 'archive';
   currentMode: Mode;
+  onOpenLanguageSettings?: () => void;
 }
 
 export default function Sidebar({
@@ -19,11 +22,13 @@ export default function Sidebar({
   onModeChange,
   currentView,
   currentMode,
+  onOpenLanguageSettings,
 }: SidebarProps) {
+  const { language, t } = useLanguage();
   const items = [
     {
       icon: Plus,
-      label: 'Initiate',
+      label: t.deconstruct || 'Initiate',
       onClick: onNew,
       active: currentView === 'home',
     },
@@ -35,15 +40,21 @@ export default function Sidebar({
     },
     {
       icon: Zap,
-      label: 'Velocity',
+      label: t.velocity || 'Velocity',
       onClick: () => onModeChange('fast'),
       active: currentMode === 'fast',
     },
     {
       icon: Microscope,
-      label: 'Infinite Spectrum',
+      label: t.research || 'Infinite Spectrum',
       onClick: () => onModeChange('research_extreme'),
       active: currentMode === 'research_extreme',
+    },
+    {
+      icon: LayoutGrid,
+      label: t.deep || 'DEEP',
+      onClick: () => onModeChange('deep'),
+      active: currentMode === 'deep',
     },
   ];
 
@@ -54,7 +65,7 @@ export default function Sidebar({
       <button
         onClick={onNew}
         className="mb-6 flex items-center justify-center bg-transparent border-none outline-none"
-        title="Eclipse — Home"
+        title={t.deconstruct || 'Eclipse — Home'}
       >
         <EclipseLogo size={28} animate={false} loop={false} />
       </button>
@@ -79,10 +90,26 @@ export default function Sidebar({
         ))}
       </div>
 
-      {/* Bottom Profile */}
-      <div className="mt-auto mb-6">
-        <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800/50 flex items-center justify-center text-[10px] font-bold text-zinc-600 shadow-lg transition-all hover:border-[#e08b3a]/30 hover:text-zinc-400">
-          YG
+      {/* Bottom Section */}
+      <div className="mt-auto flex flex-col gap-4 mb-6 relative z-50">
+        {/* Language Button */}
+        <button
+          onClick={() => {
+            console.log('Language button clicked, calling handler:', onOpenLanguageSettings);
+            onOpenLanguageSettings && onOpenLanguageSettings();
+          }}
+          className="relative p-2.5 rounded-xl flex items-center justify-center transition-all text-zinc-700 hover:text-[rgba(255,160,50,0.8)] hover:bg-[rgba(255,160,50,0.05)] active:scale-95"
+          title={`Language: ${language.toUpperCase()}`}
+          type="button"
+        >
+          <Globe size={20} strokeWidth={1.2} />
+          <span className="absolute -bottom-1 text-[8px] font-bold uppercase tracking-wider">
+            {language}
+          </span>
+        </button>
+
+        <div className="relative z-50 pointer-events-auto">
+          <AccountPanel />
         </div>
       </div>
     </aside>

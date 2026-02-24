@@ -7,6 +7,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import EclipseLogo from './EclipseLogo';
 
+import { useIsMobile } from '@/lib/hooks';
+
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
@@ -19,9 +21,8 @@ export interface Step {
 }
 
 interface CognitivePathProps {
-    steps: Step[];
-    mode: 'fast' | 'research_extreme';
-    sources?: any[];
+    events: any[];
+    mode: 'fast' | 'research_extreme' | 'deep';
     streamingText?: string;
 }
 
@@ -62,7 +63,7 @@ function extractReadablePreview(raw: string): string {
 function deduplicateSources(sources: any[]): Array<{ url: string; domain: string; count: number }> {
     const map = new Map<string, { url: string; domain: string; count: number }>();
     for (const source of sources) {
-        const url = typeof source === 'string' ? source : source.url;
+        const url = typeof source === 'string' ? source : (source.url || source);
         try {
             const domain = new URL(url).hostname.replace('www.', '');
             if (map.has(domain)) {
@@ -75,7 +76,31 @@ function deduplicateSources(sources: any[]): Array<{ url: string; domain: string
     return Array.from(map.values());
 }
 
-export default function CognitivePath({ steps, mode, sources = [], streamingText = '' }: CognitivePathProps) {
+export default function CognitivePath({ events = [], mode, streamingText = '' }: CognitivePathProps) {
+    // Transform events to steps
+    const steps = useMemo(() => {
+        const subqueries = events.filter(e => e.event === 'subquery').map(e => e.query);
+        const sourcesEvent = events.find(e => e.event === 'sources_found');
+        const analysisStarted = events.some(e => e.event === 'analysis_started');
+        const isComplete = events.some(e => e.event === 'complete');
+
+        const s: Step[] = [
+            { id: 'genesis', label: 'Processing intent', status: events.length > 0 ? 'complete' : 'active' },
+            {
+                id: 'searching',
+                label: 'Searching signals across the expanse...',
+                status: sourcesEvent ? 'complete' : (subqueries.length > 0 ? 'active' : 'pending'),
+                queries: subqueries
+            }
+        ];
+        return s;
+    }, [events]);
+
+    const sources = useMemo(() => {
+        const sourcesEvent = events.find(e => e.event === 'sources_found');
+        return sourcesEvent?.sources || [];
+    }, [events]);
+
     const completedSteps = useMemo(() => steps.filter(s => s.status === 'complete'), [steps]);
     const activeStep = useMemo(() => steps.find(s => s.status === 'active'), [steps]);
     const isExtreme = mode === 'research_extreme';
@@ -84,10 +109,84 @@ export default function CognitivePath({ steps, mode, sources = [], streamingText
     const preview = useMemo(() => extractReadablePreview(streamingText), [streamingText]);
     const uniqueSources = useMemo(() => deduplicateSources(sources), [sources]);
 
+    const isMobile = useIsMobile();
+
+    if (isMobile) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 px-6 w-full max-w-lg select-none">
+                {/* Large Breathing Logo */}
+                <motion.div
+                    animate={{
+                        scale: [1, 1.05, 1],
+                        opacity: [0.8, 1, 0.8],
+                        filter: ['blur(0px)', 'blur(1px)', 'blur(0px)']
+                    }}
+                    transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                    className="relative mb-8"
+                >
+                    <div className="absolute inset-0 bg-[#f5a623] blur-[40px] opacity-20 scale-150 rounded-full" />
+                    <EclipseLogo size={80} animate={true} loop={true} />
+                </motion.div>
+
+                <p className="text-[14px] font-medium text-zinc-400 tracking-[0.2em] uppercase mb-12 animate-pulse text-center">
+                    Synchronizing with Eclipse Archive...
+                </p>
+
+                {/* Vertical Step List */}
+                <div className="relative w-full max-w-[280px]">
+                    {/* Delicate Vertical Line */}
+                    <div className="absolute left-[7px] top-2 bottom-2 w-[0.5px] bg-gradient-to-b from-transparent via-[#f5a623]/20 to-transparent" />
+
+                    <div className="space-y-6">
+                        {steps.map((step, idx) => (
+                            <motion.div
+                                key={step.id}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: step.status === 'pending' ? 0.3 : 1, x: 0 }}
+                                transition={{ delay: idx * 0.1 }}
+                                className="flex items-center gap-4 relative z-10"
+                            >
+                                <div className={cn(
+                                    "w-3.5 h-3.5 rounded-full border border-[#f5a623]/30 flex items-center justify-center transition-all duration-500",
+                                    step.status === 'complete' ? "bg-[#f5a623] border-[#f5a623]" :
+                                        step.status === 'active' ? "bg-[#f5a623]/10 border-[#f5a623] shadow-[0_0_8px_rgba(245,166,35,0.4)]" : "bg-zinc-900"
+                                )}>
+                                    {step.status === 'complete' && <Check size={8} className="text-black font-bold" />}
+                                    {step.status === 'active' && <div className="w-1 h-1 rounded-full bg-[#f5a623] animate-pulse" />}
+                                </div>
+                                <span className={cn(
+                                    "text-[14px] font-[family-name:var(--font-instrument-serif)] italic tracking-tight",
+                                    step.status === 'active' ? "text-white" : "text-zinc-500"
+                                )}>
+                                    {step.label}
+                                </span>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Mobile Preview */}
+                {isSynthesizing && preview && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-12 w-full p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] backdrop-blur-sm"
+                    >
+                        <StreamingPreview text={preview} />
+                    </motion.div>
+                )}
+            </div>
+        );
+    }
+
     if (!isExtreme) {
         // ── VELOCITY MODE ──
         return (
-            <div className="flex flex-col gap-4 py-2 px-6 w-full max-w-lg select-none">
+            <div className="flex flex-col gap-4 pt-1 pb-2 px-6 w-full max-w-lg select-none">
                 <AnimatePresence mode="wait">
                     {activeStep && (
                         <motion.div
@@ -140,7 +239,7 @@ export default function CognitivePath({ steps, mode, sources = [], streamingText
 
     // ── INFINITE SPECTRUM MODE ──
     return (
-        <div className="relative pl-8 py-4 w-full max-w-xl select-none">
+        <div className="relative pl-8 pt-1 pb-4 w-full max-w-xl select-none">
             {/* Timeline line */}
             <div className="absolute left-[13px] top-6 bottom-4 w-[1px] bg-zinc-800" />
 
@@ -215,7 +314,7 @@ export default function CognitivePath({ steps, mode, sources = [], streamingText
                             )}
 
                             {/* REVIEWING SOURCES — no card border, flows naturally */}
-                            {uniqueSources.length > 0 && (
+                            {uniqueSources.length > 0 && (uniqueSources.length > 0) && (
                                 <div className="flex flex-col gap-2.5">
                                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#e08b3a]/60">
                                         <Globe size={10} />

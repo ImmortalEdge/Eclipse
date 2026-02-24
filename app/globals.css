@@ -28,6 +28,37 @@ body {
   pointer-events: none;
   z-index: 0;
   filter: blur(80px);
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+  animation: vintage-glow-drift 6s ease-in-out infinite;
+}
+
+.eclipse-glow.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes vintage-glow-drift {
+  0% {
+    transform: translate(-50%, -50%) scale(1) translateY(0px);
+    opacity: 0.7;
+  }
+  25% {
+    transform: translate(-50%, -50%) scale(1.02) translateY(-8px);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1) translateY(0px);
+    opacity: 0.7;
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(0.98) translateY(8px);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) translateY(0px);
+    opacity: 0.7;
+  }
 }
 
 .eclipse-ring {
@@ -43,6 +74,13 @@ body {
   pointer-events: none;
   z-index: 0;
   animation: slow-rotate 60s linear infinite;
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
+.eclipse-ring.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 @keyframes slow-rotate {
@@ -122,4 +160,93 @@ body {
 ::selection {
   background: rgba(245, 166, 35, 0.2);
   color: white;
+}
+
+/* Listening state for main search bar */
+.search-listening {
+  background: linear-gradient(90deg, rgba(245,166,35,0.06) 0%, rgba(245,166,35,0.12) 50%, rgba(245,166,35,0.06) 100%) !important;
+  border: 1px solid rgba(245,166,35,0.18) !important;
+  box-shadow: 0 12px 64px rgba(245,166,35,0.06), 0 0 40px rgba(245,166,35,0.04) !important;
+  animation: search-wave 2.6s linear infinite;
+}
+
+@keyframes search-wave {
+  0% {
+    background-position: 0% 50%;
+    transform: translateY(0px);
+  }
+  50% {
+    background-position: 100% 50%;
+    transform: translateY(-4px);
+  }
+  100% {
+    background-position: 0% 50%;
+    transform: translateY(0px);
+  }
+}
+
+/* Animated waveform dots for listening state */
+/* Animated waveform dots for listening state */
+.search-waveform-dots {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.waveform-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(245, 166, 35, 0.6);
+  animation: dot-wave 1.4s ease-in-out infinite;
+}
+
+@keyframes dot-wave {
+  0%,
+  100% {
+    transform: scaleY(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scaleY(1.8);
+    opacity: 1;
+  }
+}
+
+@keyframes barPulse {
+  from {
+    height: 4px;
+    opacity: 0.45;
+  }
+  to {
+    height: 18px;
+    opacity: 1;
+  }
+}
+
+@keyframes orbPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 
+      0 0 60px rgba(245,166,35,0.3),
+      0 0 120px rgba(245,166,35,0.12);
+  }
+  50% {
+    transform: scale(1.07);
+    box-shadow:
+      0 0 80px rgba(245,166,35,0.45),
+      0 0 160px rgba(245,166,35,0.18);
+  }
+}
+
+@keyframes ringPulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.15; }
 }

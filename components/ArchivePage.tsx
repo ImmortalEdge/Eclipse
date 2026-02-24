@@ -13,6 +13,7 @@ import {
     History
 } from 'lucide-react';
 import EclipseLogo from './EclipseLogo';
+import { useLanguage } from './LanguageProvider';
 import {
     format,
     isToday,
@@ -35,6 +36,7 @@ export interface HistoryItem {
         url: string;
     }>;
     resultUrl: string;
+    result?: any; // Full search result data
 }
 
 interface ArchivePageProps {
@@ -47,7 +49,9 @@ const HISTORY_KEY = 'eclipse_history';
 /**
  * Expanse Archive - Chronicles of Investigation
  */
+
 export default function ArchivePage({ onOpenItem, onClose }: ArchivePageProps) {
+    const { t } = useLanguage();
     const [searchQuery, setSearchQuery] = useState('');
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -138,7 +142,7 @@ export default function ArchivePage({ onOpenItem, onClose }: ArchivePageProps) {
                                 <EclipseLogo size={24} animate={false} loop={false} />
                             </button>
                             <h1 className="text-[28px] text-white font-[family-name:var(--font-instrument-serif)] italic leading-tight">
-                                Expanse Archive
+                                {t.research || 'Expanse Archive'}
                             </h1>
                             <button
                                 onClick={onClose}
@@ -161,7 +165,7 @@ export default function ArchivePage({ onOpenItem, onClose }: ArchivePageProps) {
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search your archive..."
+                            placeholder={t.placeholder || "Search your archive..."}
                             className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-12 py-3 text-[14px] text-white placeholder-white/20 focus:outline-none focus:border-[#F5A623]/30 transition-all font-sans"
                         />
                         {searchQuery && (
@@ -325,29 +329,4 @@ function ArchiveItem({ item, index, isMenuOpen, onMenuToggle, onDelete, onCopyLi
             </div>
         </motion.div>
     );
-}
-
-/**
- * Utility to save an item to history
- */
-export function saveToHistory(item: Omit<HistoryItem, 'id' | 'timestamp'>) {
-    if (typeof window === 'undefined') return;
-
-    const stored = localStorage.getItem(HISTORY_KEY);
-    let history: HistoryItem[] = stored ? JSON.parse(stored) : [];
-
-    const newItem: HistoryItem = {
-        ...item,
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: new Date().toISOString()
-    };
-
-    // Check for duplicates (same query)
-    history = history.filter(h => h.query !== item.query);
-    history.unshift(newItem);
-
-    // Limit to 500 items
-    if (history.length > 500) history = history.slice(0, 500);
-
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
